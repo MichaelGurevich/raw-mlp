@@ -4,7 +4,6 @@ class Matrix:
         self.n_cols = n_cols
         self.matrix = [[0 for i in range(n_cols)] for j in range(n_rows)]
 
-
     def add_scalar(self, scalar):
         for i in range(self.n_rows):
             for j in range(self.n_cols):
@@ -70,3 +69,27 @@ class Matrix:
                     add_mat[i][j] += mat1.matrix[i][j] + mat2.matrix[i][j]
 
         return add_mat
+    
+
+    def mat_t(self, return_mat=False):
+        mat_t = Matrix(self.n_cols, self.n_rows)
+
+        for i in range(mat_t.n_rows):
+            for j in range(mat_t.n_cols):
+                mat_t.matrix[i][j] = self.matrix[j][i]
+
+        if return_mat == True:
+            return mat_t
+        
+        self.n_cols = mat_t.n_cols
+        self.n_rows = mat_t.n_rows
+        self.matrix = mat_t.matrix
+
+    def element_oper(self, func):
+        for i in range(self.n_rows):
+            for j in range(self.n_cols):
+                self.matrix[i][j] = func(self.matrix[i][j])
+
+
+    def shape(self):
+        print(f"{self.n_rows}x{self.n_cols}" )
