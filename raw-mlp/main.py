@@ -1,9 +1,12 @@
 from Matrix import Matrix
+import random
+from MLP import MLP
+
+new_mat = Matrix(5, 2)
+
+new_mat.matrix = [[1, 2], [3, 4], [5, 6], [9, 4], [2, 5]]
 
 
-new_mat = Matrix(1, 6)
+mlp = MLP(2, 15, 1)
 
-new_mat.add_scalar(5)
-new_mat.mult_by_scalar(3)
-
-print(new_mat.matrix)
+print(mlp.feed_forward(new_mat).matrix)
