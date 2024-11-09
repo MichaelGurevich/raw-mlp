@@ -71,7 +71,7 @@ class MLP:
         cost_mat = Matrix(z.n_cols, 1)
         for j in range(z.n_cols):
             for i in range(z.n_rows):
-                cost += z.matrix[i][j] - labels.matrix[i][j]
+                cost += (z.matrix[i][j] - labels.matrix[i][j])**2
 
             cost_mat.matrix[j][0] = cost / z.n_rows
             
@@ -86,9 +86,15 @@ class MLP:
         d_a__d_z
         d_z__d_w
         '''
-
-        d_L__d_a = Matrix(1, 1)
-        d_a__d_z = Matrix.element_oper_return(self.a_, lambda a : a * (1 - a))
+        
+        labels = convert_labels(y)
+        d_L__d_a = Matrix(self.a_[-1].n_rows, self.a_[-1].n_cols)
+        for i in range(self.a_[-1].n_rows):
+            for j in range(self.a_[-1].n_cols):
+                d_L__d_a.matrix[i][j] = 2 * (self.a_[-1].matrix[i][j] - labels.matrix[i][j])
+                
+        
+        d_a__d_z = Matrix.element_oper_return(self.a_[-1], lambda a : a * (1 - a))
 
 
         # getting the gradient for updating the output w_
