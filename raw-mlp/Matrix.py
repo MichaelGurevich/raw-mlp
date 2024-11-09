@@ -86,10 +86,23 @@ class Matrix:
         self.matrix = mat_t.matrix
 
     def element_oper(self, func):
+
         for i in range(self.n_rows):
             for j in range(self.n_cols):
                 self.matrix[i][j] = func(self.matrix[i][j])
-
+        
+            
+        
+    def element_oper_return(mat, func):
+        new_mat = Matrix(mat.n_rows, mat.n_cols)
+        for i in range(mat.n_rows):
+            for j in range(mat.n_cols):
+                new_mat.matrix[i][j] = func(mat.matrix[i][j])
+        return new_mat
 
     def shape(self):
         print(f"{self.n_rows}x{self.n_cols}" )
+
+    def print_mat(self):
+        for i in range(self.n_rows):
+            print(self.matrix[i])
