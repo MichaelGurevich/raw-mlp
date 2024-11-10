@@ -1,3 +1,4 @@
+
 from Matrix import Matrix
 import random
 import math
@@ -23,7 +24,7 @@ def convert_labels(y: Matrix):
 
 
 class MLP:
-    def __init__(self,n_features, hidn_lay_num, hidn_node_num, ouput_num, l_rate=0.1):
+    def __init__(self,n_features, hidn_lay_num, hidn_node_num, ouput_num, l_rate=10):
         self.hidn_lay_num = hidn_lay_num
         self.hidn_node_num = hidn_node_num
         self.output_num = ouput_num
@@ -71,33 +72,131 @@ class MLP:
         cost_mat = Matrix(z.n_cols, 1)
         for j in range(z.n_cols):
             for i in range(z.n_rows):
-                cost += (z.matrix[i][j] - labels.matrix[i][j])**2
+                cost += ((self.a_[-1].matrix[i][j] - labels.matrix[i][j])**2 ) / X.n_rows
 
             cost_mat.matrix[j][0] = cost / z.n_rows
             
         return cost_mat
     
-    def backwards_propagation(self, cost_mat: Matrix, y):
-
-        '''
-        Part 1:
-        - Get the gradient for the w_ and b_for the output layer 
-        d_L__d_a 
-        d_a__d_z
-        d_z__d_w
-        '''
+    def backwards(self, cost_mat: Matrix, X:Matrix, y:Matrix):
         
+
+        ''' Part 1: calculate the gradient to update the weights and bias of the ouput layer'''
         labels = convert_labels(y)
-        d_L__d_a = Matrix(self.a_[-1].n_rows, self.a_[-1].n_cols)
+
+        # [n_examples, n_ouput_nodes]
+        d_L__d_a_out = Matrix(self.a_[-1].n_rows, self.a_[-1].n_cols)
         for i in range(self.a_[-1].n_rows):
             for j in range(self.a_[-1].n_cols):
-                d_L__d_a.matrix[i][j] = 2 * (self.a_[-1].matrix[i][j] - labels.matrix[i][j])
+                d_L__d_a_out.matrix[i][j] = (2 * (self.a_[-1].matrix[i][j] - labels.matrix[i][j])) / labels.n_rows
                 
+    
+        # [n_examples, n_ouput_nodes]
+        d_a_out__d_z_out = Matrix.element_oper_return(self.a_[-1], lambda a : a * (1 - a))
+
+        # [n_examples, n_features]
+        d_z_out__d_w_out = self.a_[-2]
+
+    
+        delta_output = Matrix(self.a_[-1].n_rows, self.a_[-1].n_cols)
+    
+        for k in range(self.w_[-1].n_cols):
+            for i in range(self.w_[-1].n_rows):
+                delta_output.matrix[i][k] = d_L__d_a_out.matrix[i][k] * d_a_out__d_z_out.matrix[i][k]
+
+        d_L__d_w_out = Matrix.dot(delta_output.mat_t(return_mat=True), d_z_out__d_w_out)
         
-        d_a__d_z = Matrix.element_oper_return(self.a_[-1], lambda a : a * (1 - a))
+
+        d_L__d_b_out = Matrix(self.w_[-1].n_rows, 1)
+
+        for i in range(delta_output.n_cols):
+            col_sum = 0
+            for j in range(delta_output.n_rows):
+                col_sum += delta_output.matrix[j][i]
+            d_L__d_b_out.matrix[i][0] = col_sum
+
+        '''Part 2: calculate the gradient to update the weights and bias of the hidden layer
+        d_z_out__d_a_h
+        d_a_h__d_z_h
+        d_z_h__d_w_h
+        '''
+
+        #print(delta_output.shape()) # 20 x 10
+        d_z_h__d_w_h = X # 20 x 10
+        d_z_out__d_a_h = self.w_[-1] # 10 x 5
+        d_a_h__d_z_h = Matrix.element_oper_return(self.a_[-2], lambda a : a * (1 - a)) # 20 x 5
+    
+
+        d_loss__a_h = Matrix.dot(delta_output, d_z_out__d_a_h) # 20 x 5
+        
+        delta_hidden = Matrix(d_loss__a_h.n_rows, d_loss__a_h.n_cols)
+        for i in range(d_loss__a_h.n_rows):
+            for j in range(d_loss__a_h.n_cols):
+                delta_hidden.matrix[i][j] = d_loss__a_h.matrix[i][j] * d_a_h__d_z_h.matrix[i][j]
+            
+        d_L__d_w_h = Matrix.dot(delta_hidden.mat_t(return_mat=True), d_z_h__d_w_h)
+        
+
+        d_L__d_b_h = Matrix(self.w_[-2].n_rows, 1)
+
+        for i in range(delta_hidden.n_cols):
+            col_sum = 0
+            for j in range(delta_hidden.n_rows):
+                col_sum += delta_hidden.matrix[j][i]
+            col_sum /= delta_hidden.n_rows
+            d_L__d_b_h.matrix[i][0] = col_sum
 
 
-        # getting the gradient for updating the output w_
+        return (d_L__d_w_out, d_L__d_b_out, d_L__d_w_h, d_L__d_b_h)
+
+
+        
+
+    def fit(self,e:int, X:Matrix, y:Matrix):
+
+
+        for _ in range(e):
+            zip_list = list(zip(X.matrix, y.matrix))
+            
+            X_shuffled = Matrix(X.n_rows, X.n_cols)
+            y_shuffled = Matrix(y.n_rows, y.n_cols)
+
+            random.shuffle(zip_list)
+
+            X_shuffled.matrix, y_shuffled.matrix = zip(*zip_list)
+
+            X_shuffled.matrix = list(X_shuffled.matrix)
+            y_shuffled.matrix = list(y_shuffled.matrix)
+            
+            cost = self.forward(X, y)
+            #print(cost.matrix[:5])
+            d_L__d_w_out, d_L__d_b_out, d_L__d_w_h, d_L__d_b_h = self.backwards(cost, X, y)
+            d_L__d_w_out.mult_by_scalar(-self.l_rate)
+            d_L__d_b_out.mult_by_scalar(-self.l_rate)
+            d_L__d_w_h.mult_by_scalar(-self.l_rate)
+            d_L__d_b_h.mult_by_scalar(-self.l_rate)
+
+            self.w_[-1].mat_add(d_L__d_w_out)
+            self.b_[-1].mat_add(d_L__d_b_out)
+            self.w_[-2].mat_add(d_L__d_w_h)
+            self.b_[-2].mat_add(d_L__d_b_h)
+            
+    def guess(self, x):
+        self.a_ = []
+        dot_mat = Matrix.dot(x, self.w_[0].mat_t(return_mat=True))
+        z = add_bias(dot_mat, self.b_[0])
+        z.element_oper(sigmoid)
+        self.a_.append(z)
+
+        for i in range(1, len(self.w_)):
+            dot_mat = Matrix.dot(z, self.w_[i].mat_t(return_mat=True))
+            z = add_bias(dot_mat, self.b_[i])
+            z.element_oper(sigmoid)
+            self.a_.append(z)
+
+        return self.a_[-1]
+        
+      
         
         
        
