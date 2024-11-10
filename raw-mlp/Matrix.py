@@ -59,7 +59,7 @@ class Matrix:
                     self.matrix[i][j] += mat.matrix[i][j]
 
     
-    def mat_add(mat1, mat2):
+    '''def mat_add(mat1, mat2):
         if mat1.n_rows != mat2.n_rows or mat1.n_cols != mat2.n_cols:
             raise Exception("Matrices are not the same dimentions")
         else:
@@ -69,6 +69,7 @@ class Matrix:
                     add_mat[i][j] += mat1.matrix[i][j] + mat2.matrix[i][j]
 
         return add_mat
+        '''
     
 
     def mat_t(self, return_mat=False):
@@ -101,7 +102,7 @@ class Matrix:
         return new_mat
 
     def shape(self):
-        print(f"{self.n_rows}x{self.n_cols}" )
+        print(f'{self.n_rows}x{self.n_cols}')
 
     def print_mat(self):
         for i in range(self.n_rows):
