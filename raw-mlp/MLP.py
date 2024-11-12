@@ -19,7 +19,9 @@ class MLP:
         self.w_out = Matrix(OUTPUT_SIZE, hidden_size)
         self.b_out = Matrix(OUTPUT_SIZE, 1)
         self.w_hidden.random()
+        self.w_hidden.multiply_by_scalar(math.sqrt(2 / (self.input_size + self.hidden_size)))
         self.w_out.random()
+        self.w_out.multiply_by_scalar(math.sqrt(2 / (self.hidden_size + self.output_size)))
         
     def forward(self, X:Matrix):
         data_dot_w_h = Matrix.multiply(X, Matrix.transpose(self.w_hidden))
@@ -129,7 +131,7 @@ for i in range(exmp.rows):
     y_exmp.set_element(i, 0, random_num)
 
 model = MLP(10, 15)
-model.fit(X, y, 5, 0.1)
+model.fit(X, y, 15, 0.01)
 
 a_o = model.guess(exmp)
 
