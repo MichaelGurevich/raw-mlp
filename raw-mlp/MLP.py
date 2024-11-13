@@ -1,12 +1,35 @@
 from Matrix import Matrix
 import math
 import random
+import numpy as np
 
 OUTPUT_SIZE = 10
 
 
 def sigmoid(z):
     return 1 / (1 + math.e ** (-z))
+
+def mini_batch_generator(X, y, n_batch, batch_size):
+    combined = list(zip(X.matrix, y.matrix))
+    random.shuffle(combined)
+    X_shuffled, y_shuffled = zip(*combined)
+    X_shuffled = list(X_shuffled)
+    y_shuffled = list(y_shuffled)
+
+    mini_batches = []
+
+    #print(X_shuffled[0:1])
+    for i in range(n_batch):
+        index = 0
+        X_mini = Matrix(batch_size, X.cols)
+        y_mini = Matrix(batch_size, 1)
+        X_mini.matrix = X_shuffled[index: index+batch_size]
+        y_mini.matrix = y_shuffled[index: index+batch_size]
+        index += batch_size
+        mini_batches.append((X_mini, y_mini))
+    
+    return mini_batches
+
 
 
 class MLP:
@@ -16,12 +39,18 @@ class MLP:
         self.output_size = OUTPUT_SIZE
         self.w_hidden = Matrix(hidden_size, input_size)
         self.b_hidden = Matrix(hidden_size, 1)
+
         self.w_out = Matrix(OUTPUT_SIZE, hidden_size)
         self.b_out = Matrix(OUTPUT_SIZE, 1)
-        self.w_hidden.random()
-        self.w_hidden.multiply_by_scalar(math.sqrt(2 / (self.input_size + self.hidden_size)))
-        self.w_out.random()
-        self.w_out.multiply_by_scalar(math.sqrt(2 / (self.hidden_size + self.output_size)))
+
+        rng = np.random.RandomState(123)
+
+        self.w_hidden.matrix = rng.normal(
+            loc=0.0, scale=0.1, size=(hidden_size, input_size)).tolist()
+        
+        self.w_out.matrix = rng.normal(
+            loc=0.0, scale=0.1, size=(OUTPUT_SIZE, hidden_size)).tolist()
+
         
     def forward(self, X:Matrix):
         data_dot_w_h = Matrix.multiply(X, Matrix.transpose(self.w_hidden))
@@ -46,7 +75,7 @@ class MLP:
 
 
     def cost(self, a_o:Matrix, y:Matrix):
-
+        
         y_onehot = MLP.y_to_one_hot(y)
 
         total_cost = 0 
@@ -57,6 +86,8 @@ class MLP:
                         
             
         return total_cost / (a_o.rows * a_o.cols)
+    
+    
     
     def backwards(self, a_h, a_o, X, y):
 
@@ -109,12 +140,28 @@ class MLP:
             d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o = self.backwards(a_h, a_o, X, y)
             self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
 
+    def train(self, X, y, epochs=20, l_rate=0.1):
+
+        #create batch list
+        mini_batches = mini_batch_generator(X, y, 50, 100)
+
+        for e in range(epochs):
+            mse = 0
+            for (X_mini, y_mini) in mini_batches:
+                a_h, a_o = self.forward(X_mini)
+                mse += self.cost(a_o, y_mini)
+                d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o = self.backwards(a_h, a_o, X_mini, y_mini)
+                self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
+
+            mse /= len(mini_batches)
+            print(f"Epoch: {e}, Cost: {mse}")
+
     def guess(self,X):
         a_h, a_o = self.forward(X)
         return a_o
 
-X = Matrix(5000, 10)
-y = Matrix(5000, 1)
+X = Matrix(50000, 10)
+y = Matrix(50000, 1)
 
 for i in range(X.rows):
     random_num = random.randint(0,9)
@@ -130,8 +177,13 @@ for i in range(exmp.rows):
     exmp.set_element(i, random_num, 1)
     y_exmp.set_element(i, 0, random_num)
 
-model = MLP(10, 15)
-model.fit(X, y, 15, 0.01)
+model = MLP(10, 40)
+#model.fit(X, y, 15, 0.01)
+
+
+
+model.train(X, y, 10, l_rate=0.01)
+
 
 a_o = model.guess(exmp)
 
@@ -141,7 +193,6 @@ for row in range(a_o.rows):
         wrong += 1
 
 print(f"wrong: {wrong}")
-
 
 
 
