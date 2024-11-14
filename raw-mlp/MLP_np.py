@@ -1,191 +1,264 @@
-from Matrix import Matrix
-import math
-import random
+
+
+'''
+ Things to try:
+_________________
+1. Create my own batch generator:
+    Create a list of batches and ittrate through them in the train function
+
+
+'''
+
+
+
+from sklearn.model_selection import train_test_split
 import numpy as np
 
-OUTPUT_SIZE = 10
+
+def create_X_y(num_examples, num_features):
+
+    # Initialize the features matrix with zeros
+    X = np.zeros((num_examples, num_features), dtype=int)
+
+    # Generate labels and populate the features matrix
+    y = np.random.randint(0, num_features, size=num_examples)
+
+    # Set the corresponding feature to 1 based on the label for each example
+    for i, label in enumerate(y):
+        X[i, label] = 1
+
+    return X, y
 
 
-def sigmoid(z):
-    return 1 / (1 + math.e ** (-z))
+X, y = create_X_y(50000, 10)
 
-def mini_batch_generator(X, y, n_batch, batch_size):
-    combined = list(zip(X.matrix, y.matrix))
-    random.shuffle(combined)
-    X_shuffled, y_shuffled = zip(*combined)
-    X_shuffled = list(X_shuffled)
-    y_shuffled = list(y_shuffled)
+X_temp, X_test, y_temp, y_test = train_test_split(
+    X, y, test_size=10000, random_state=123, stratify=y)
 
-    for i in range(n_batch):
-        index = 0
-        X_mini = Matrix(batch_size, X.cols)
-        y_mini = Matrix(batch_size, 1)
-        X_mini.matrix = X_shuffled[index: index+batch_size]
-        y_mini.matrix = y_shuffled[index: index+batch_size]
-        index += batch_size
-        yield X_mini, y_mini
-    
+X_train, X_valid, y_train, y_valid = train_test_split(
+    X_temp, y_temp, test_size=5000, random_state=123, stratify=y_temp)
 
 
+# optional to free up some memory by deleting non-used arrays:
+del X_temp, y_temp, X, y
 
-class MLP:
-    def __init__(self, input_size, hidden_size):
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.output_size = OUTPUT_SIZE
-        self.w_hidden = Matrix(hidden_size, input_size)
-        self.b_hidden = Matrix(hidden_size, 1)
+##########################
+### MODEL
+##########################
 
-        self.w_out = Matrix(OUTPUT_SIZE, hidden_size)
-        self.b_out = Matrix(OUTPUT_SIZE, 1)
+def sigmoid(z):                                        
+    return 1. / (1. + np.exp(-z))
 
-        rng = np.random.RandomState(123)
 
-        self.w_hidden.matrix = rng.normal(
-            loc=0.0, scale=0.1, size=(hidden_size, input_size)).tolist()
+def int_to_onehot(y, num_labels):
+
+    ary = np.zeros((y.shape[0], num_labels))
+    for i, val in enumerate(y):
+
+        ary[i, val] = 1
+
+    return ary
+
+
+class NeuralNetMLP:
+
+    def __init__(self, num_features, num_hidden, num_classes, random_seed=123):
+        super().__init__()
         
-        self.w_out.matrix = rng.normal(
-            loc=0.0, scale=0.1, size=(OUTPUT_SIZE, hidden_size)).tolist()
+        self.num_classes = num_classes
+        
+        # hidden
+        rng = np.random.RandomState(random_seed)
+        
+        self.weight_h = rng.normal(
+            loc=0.0, scale=0.1, size=(num_hidden, num_features))
+        self.bias_h = np.zeros(num_hidden)
+        
+        # output
+        self.weight_out = rng.normal(
+            loc=0.0, scale=0.1, size=(num_classes, num_hidden))
+        self.bias_out = np.zeros(num_classes)
+        
+    def forward(self, x):
+        # Hidden layer
+        # input dim: [n_examples, n_features] dot [n_hidden, n_features].T
+        # output dim: [n_examples, n_hidden]
+        z_h = np.dot(x, self.weight_h.T) + self.bias_h
+        a_h = sigmoid(z_h)
+
+        # Output layer
+        # input dim: [n_examples, n_hidden] dot [n_classes, n_hidden].T
+        # output dim: [n_examples, n_classes]
+        z_out = np.dot(a_h, self.weight_out.T) + self.bias_out
+        a_out = sigmoid(z_out)
+        return a_h, a_out
+
+    def backward(self, x, a_h, a_out, y):  
+    
+        #########################
+        ### Output layer weights
+        #########################
+        
+        # onehot encoding
+        y_onehot = int_to_onehot(y, self.num_classes)
+
+        # Part 1: dLoss/dOutWeights
+        ## = dLoss/dOutAct * dOutAct/dOutNet * dOutNet/dOutWeight
+        ## where DeltaOut = dLoss/dOutAct * dOutAct/dOutNet
+        ## for convenient re-use
+        
+        # input/output dim: [n_examples, n_classes]
+        d_loss__d_a_out = 2.*(a_out - y_onehot) / y.shape[0]
+
+        # input/output dim: [n_examples, n_classes]
+        d_a_out__d_z_out = a_out * (1. - a_out) # sigmoid derivative
+
+        # output dim: [n_examples, n_classes]
+        delta_out = d_loss__d_a_out * d_a_out__d_z_out # "delta (rule) placeholder"
+
+        # gradient for output weights
+        
+        # [n_examples, n_hidden]
+        d_z_out__dw_out = a_h
+        
+        # input dim: [n_classes, n_examples] dot [n_examples, n_hidden]
+        # output dim: [n_classes, n_hidden]
+        d_loss__dw_out = np.dot(delta_out.T, d_z_out__dw_out)
+        d_loss__db_out = np.sum(delta_out, axis=0)
+        
+
+        #################################        
+        # Part 2: dLoss/dHiddenWeights
+        ## = DeltaOut * dOutNet/dHiddenAct * dHiddenAct/dHiddenNet * dHiddenNet/dWeight
+        
+        # [n_classes, n_hidden]
+        d_z_out__a_h = self.weight_out
+        
+        # output dim: [n_examples, n_hidden]
+        d_loss__a_h = np.dot(delta_out, d_z_out__a_h)
+        
+        # [n_examples, n_hidden]
+        d_a_h__d_z_h = a_h * (1. - a_h) # sigmoid derivative
+        
+        # [n_examples, n_features]
+        d_z_h__d_w_h = x
+        
+        # output dim: [n_hidden, n_features]
+        d_loss__d_w_h = np.dot((d_loss__a_h * d_a_h__d_z_h).T, d_z_h__d_w_h)
+        d_loss__d_b_h = np.sum((d_loss__a_h * d_a_h__d_z_h), axis=0)
+
+        return (d_loss__dw_out, d_loss__db_out, 
+                d_loss__d_w_h, d_loss__d_b_h)
+
+
+
+
+model = NeuralNetMLP(num_features=10,
+                     num_hidden=20,
+                     num_classes=10)
+
+
+# ## Coding the neural network training loop
+
+# Defining data loaders:
+
+
+
+
+num_epochs = 50
+minibatch_size = 100
+
+
+def minibatch_generator(X, y, minibatch_size):
+    indices = np.arange(X.shape[0])
+    np.random.shuffle(indices)
+
+    for start_idx in range(0, indices.shape[0] - minibatch_size 
+                           + 1, minibatch_size):
+        batch_idx = indices[start_idx:start_idx + minibatch_size]
+        yield X[batch_idx], y[batch_idx]
 
         
-    def forward(self, X:Matrix):
-        data_dot_w_h = Matrix.multiply(X, Matrix.transpose(self.w_hidden))
-        z_h = Matrix.add_vector(data_dot_w_h, Matrix.transpose(self.b_hidden), axis=0)
-        a_h = Matrix.apply_function_return(z_h, sigmoid)
-
-        a_h_dot_w_out = Matrix.multiply(a_h, Matrix.transpose(self.w_out))
-        z_o = Matrix.add_vector(a_h_dot_w_out, Matrix.transpose(self.b_out), axis=0)
-        a_o = Matrix.apply_function_return(z_o, sigmoid)
-
-        return a_h, a_o
-
-
-    def y_to_one_hot(y:Matrix):
-        # convert to one hot
-        y_onehot = Matrix(y.rows, OUTPUT_SIZE)
-        y_onehot.zeros()
-        for i in range(y_onehot.rows):
-            y_onehot.set_element(i, y.get_element(i, 0), 1)
-
-        return y_onehot
-
-
-    def cost(self, a_o:Matrix, y:Matrix):
+def compute_mse_and_acc(nnet, X, y, num_labels=10, minibatch_size=100):
+    mse, correct_pred, num_examples = 0., 0, 0
+    minibatch_gen = minibatch_generator(X, y, minibatch_size)
         
-        y_onehot = MLP.y_to_one_hot(y)
+    for i, (features, targets) in enumerate(minibatch_gen):
 
-        total_cost = 0 
-        for row in range(a_o.rows):
-            for col in range(a_o.cols):
-                error = y_onehot.get_element(row, col) - a_o.get_element(row, col)
-                total_cost += error ** 2 
-                        
-            
-        return total_cost / (a_o.rows * a_o.cols)
-    
-    
-    
-    def backwards(self, a_h, a_o, X, y):
-
-        y_onehot = MLP.y_to_one_hot(y)
-
-        # Part 1: update weights and bias for output layer
-        d_L__d_a_o = Matrix(a_o.rows, a_o.cols)
-        for row in range(d_L__d_a_o.rows):
-            for col in range(d_L__d_a_o.cols):
-                derivative = (2 * (a_o.get_element(row, col) -  y_onehot.get_element(row, col))) / a_o.rows 
-                d_L__d_a_o.set_element(row, col, derivative)
-
-        d_a_o__d_z_o = Matrix.apply_function_return(a_o, lambda a : a * (1 - a))
-        d_z_o__d_w_o = a_h
-
-        delta_o = Matrix.elementwise_multiply(d_L__d_a_o, d_a_o__d_z_o)
-
-        d_L__d_w_o = Matrix.multiply(Matrix.transpose(delta_o), d_z_o__d_w_o)
-        d_L__d_b_o = Matrix.transpose(Matrix.add_along_axis(delta_o, axis=0))
+        _, probas = nnet.forward(features)
+        predicted_labels = np.argmax(probas, axis=1)
         
-        # Part 2: update weights and bias for hidden layer
-
-        d_z_o__d_a_h = self.w_out
-        d_a_h__d_z_h = Matrix.apply_function_return(a_h, lambda a : a * (1 - a))
-        d_z_h__d_w_h = X
-
-        d_L__a_h = Matrix.multiply(delta_o, d_z_o__d_a_h)
-
-        delta_h = Matrix.elementwise_multiply(d_L__a_h, d_a_h__d_z_h)
-        d_L__d_w_h = Matrix.multiply(Matrix.transpose(delta_h), d_z_h__d_w_h)
-        d_L__d_b_h = Matrix.transpose(Matrix.add_along_axis(delta_h, axis=0))
+        onehot_targets = int_to_onehot(targets, num_labels=num_labels)
+        loss = np.mean((onehot_targets - probas)**2)
+        correct_pred += (predicted_labels == targets).sum()
         
-        return d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o
+        num_examples += targets.shape[0]
+        mse += loss
+
+    mse = mse/(i+1)
+    acc = correct_pred/num_examples
+    return mse, acc
+
+
+def train(model, X_train, y_train, X_valid, y_valid, num_epochs,
+          learning_rate=0.1):
     
+    epoch_loss = []
+    epoch_train_acc = []
+    epoch_valid_acc = []
+    
+    for e in range(num_epochs):
 
-    def update_weight_bias(self, d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate):
-        updates = [d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o]
-        for i in range(len(updates)):
-            updates[i].multiply_by_scalar(l_rate)
+        # iterate over minibatches
+        minibatch_gen = minibatch_generator(
+            X_train, y_train, minibatch_size)
+        
 
-        self.w_hidden = Matrix.subtract(self.w_hidden, updates[0])
-        self.b_hidden = Matrix.subtract(self.b_hidden, updates[1])
-        self.w_out = Matrix.subtract(self.w_out, updates[2])
-        self.b_out = Matrix.subtract(self.b_out, updates[3])
+    
+        for X_train_mini, y_train_mini in minibatch_gen:
+            #### Compute outputs ####
+            a_h, a_out = model.forward(X_train_mini)
 
-    def fit(self,X, y, e=20,l_rate=0.1):
-        for i in range(e):
-            a_h, a_o = self.forward(X)
-            print(f"Epoch: {i}, Cost: {self.cost(a_o, y)}")
-            d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o = self.backwards(a_h, a_o, X, y)
-            self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
+            #### Compute gradients ####
+            d_loss__d_w_out, d_loss__d_b_out, d_loss__d_w_h, d_loss__d_b_h =                 model.backward(X_train_mini, a_h, a_out, y_train_mini)
 
-    def train(self, X, y, epochs=20, l_rate=0.1):
+            #### Update weights ####
+            model.weight_h -= learning_rate * d_loss__d_w_h
+            model.bias_h -= learning_rate * d_loss__d_b_h
+            model.weight_out -= learning_rate * d_loss__d_w_out
+            model.bias_out -= learning_rate * d_loss__d_b_out
+        
+        #### Epoch Logging ####        
+        train_mse, train_acc = compute_mse_and_acc(model, X_train, y_train)
+        valid_mse, valid_acc = compute_mse_and_acc(model, X_valid, y_valid)
+        train_acc, valid_acc = train_acc*100, valid_acc*100
+        epoch_train_acc.append(train_acc)
+        epoch_valid_acc.append(valid_acc)
+        epoch_loss.append(train_mse)
+        print(f'Epoch: {e+1:03d}/{num_epochs:03d} '
+              f'| Train MSE: {train_mse:.2f} '
+              f'| Train Acc: {train_acc:.2f}% '
+              f'| Valid Acc: {valid_acc:.2f}%')
 
-        for e in range(epochs):
-            mini_batches = mini_batch_generator(X, y, 300, 100)
-            mse = 0
-            for X_mini, y_mini in mini_batches:
-                a_h, a_o = self.forward(X_mini)
-                mse += self.cost(a_o, y_mini)
-                d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o = self.backwards(a_h, a_o, X_mini, y_mini)
-                self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
-
-            mse /= 300
-            print(f"Epoch: {e}, Cost: {mse}")
-
-    def guess(self,X):
-        a_h, a_o = self.forward(X)
-        return a_o
-
-X = Matrix(50000, 10)
-y = Matrix(50000, 1)
-
-for i in range(X.rows):
-    random_num = random.randint(0,9)
-    X.set_element(i, random_num, 1)
-    y.set_element(i, 0, random_num)
-
-
-exmp = Matrix(100, 10)
-y_exmp = Matrix(100, 1)
-
-for i in range(exmp.rows):
-    random_num = random.randint(0,9)
-    exmp.set_element(i, random_num, 1)
-    y_exmp.set_element(i, 0, random_num)
-
-model = MLP(10, 50)
-#model.fit(X, y, 15, 0.01)
+    return epoch_loss, epoch_train_acc, epoch_valid_acc
 
 
 
-model.train(X, y, 12, l_rate=0.1)
+def guess(model:NeuralNetMLP, X, y):
+    _, a_o = model.forward(X)
+    max_indices = np.argmax(a_o, axis=1)
+    wrong = sum(max_indices != y)
+    print(f"Correct {X.shape[0] - wrong}, Wrong: {wrong}")
 
 
-a_o = model.guess(exmp)
-
-wrong = 0
-for row in range(a_o.rows):
-    if a_o.matrix[row].index(max(a_o.matrix[row])) != y_exmp.matrix[row][0]:
-        wrong += 1
-
-print(f"right: {a_o.rows - wrong}, wrong: {wrong}")
 
 
+np.random.seed(123) # for the training set shuffling
+
+epoch_loss, epoch_train_acc, epoch_valid_acc = train(
+    model, X_train, y_train, X_valid, y_valid,
+    num_epochs=50, learning_rate=0.1)
+
+
+X_test, y_test = create_X_y(100, 10)
+guess(model, X_test, y_test)
