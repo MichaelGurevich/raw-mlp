@@ -26,7 +26,12 @@ def mini_batch_generator(X, y, n_batch, batch_size):
         yield X_mini, y_mini
     
 
-
+def calc_acc(a_o, y):
+    wrong = 0
+    for row in range(a_o.rows):
+        if a_o.matrix[row].index(max(a_o.matrix[row])) != y.matrix[row][0]:
+            wrong += 1
+    return wrong
 
 class MLP:
     def __init__(self, input_size, hidden_size):
@@ -136,7 +141,7 @@ class MLP:
             d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o = self.backwards(a_h, a_o, X, y)
             self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
 
-    def train(self, X, y, epochs=20, l_rate=0.1):
+    def train(self, X, y, X_test, y_test, epochs=20, l_rate=0.1):
 
         for e in range(epochs):
             mini_batches = mini_batch_generator(X, y, 300, 100)
@@ -148,7 +153,9 @@ class MLP:
                 self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
 
             mse /= 300
-            print(f"Epoch: {e}, Cost: {mse}")
+            a_o_test = model.guess(X_test)
+            wrong = calc_acc(a_o_test, y_test)
+            print(f"Epoch: {e+1}, Cost: {mse}, Accuracy: {(a_o.rows - wrong / a_o.rows) * 100 }%")
 
     def guess(self,X):
         a_h, a_o = self.forward(X)
@@ -176,16 +183,12 @@ model = MLP(10, 50)
 
 
 
-model.train(X, y, 12, l_rate=0.1)
+model.train(X, y, exmp, y_exmp, 10, l_rate=0.1)
 
 
-a_o = model.guess(exmp)
 
-wrong = 0
-for row in range(a_o.rows):
-    if a_o.matrix[row].index(max(a_o.matrix[row])) != y_exmp.matrix[row][0]:
-        wrong += 1
 
-print(f"right: {a_o.rows - wrong}, wrong: {wrong}")
+
+
 
 
