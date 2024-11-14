@@ -16,9 +16,6 @@ def mini_batch_generator(X, y, n_batch, batch_size):
     X_shuffled = list(X_shuffled)
     y_shuffled = list(y_shuffled)
 
-    mini_batches = []
-
-    #print(X_shuffled[0:1])
     for i in range(n_batch):
         index = 0
         X_mini = Matrix(batch_size, X.cols)
@@ -26,9 +23,8 @@ def mini_batch_generator(X, y, n_batch, batch_size):
         X_mini.matrix = X_shuffled[index: index+batch_size]
         y_mini.matrix = y_shuffled[index: index+batch_size]
         index += batch_size
-        mini_batches.append((X_mini, y_mini))
+        yield X_mini, y_mini
     
-    return mini_batches
 
 
 
@@ -142,18 +138,16 @@ class MLP:
 
     def train(self, X, y, epochs=20, l_rate=0.1):
 
-        #create batch list
-        mini_batches = mini_batch_generator(X, y, 50, 100)
-
         for e in range(epochs):
+            mini_batches = mini_batch_generator(X, y, 300, 100)
             mse = 0
-            for (X_mini, y_mini) in mini_batches:
+            for X_mini, y_mini in mini_batches:
                 a_h, a_o = self.forward(X_mini)
                 mse += self.cost(a_o, y_mini)
                 d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o = self.backwards(a_h, a_o, X_mini, y_mini)
                 self.update_weight_bias(d_L__d_w_h, d_L__d_b_h, d_L__d_w_o, d_L__d_b_o, l_rate)
 
-            mse /= len(mini_batches)
+            mse /= 300
             print(f"Epoch: {e}, Cost: {mse}")
 
     def guess(self,X):
@@ -177,12 +171,12 @@ for i in range(exmp.rows):
     exmp.set_element(i, random_num, 1)
     y_exmp.set_element(i, 0, random_num)
 
-model = MLP(10, 40)
+model = MLP(10, 50)
 #model.fit(X, y, 15, 0.01)
 
 
 
-model.train(X, y, 10, l_rate=0.01)
+model.train(X, y, 12, l_rate=0.1)
 
 
 a_o = model.guess(exmp)
@@ -192,7 +186,6 @@ for row in range(a_o.rows):
     if a_o.matrix[row].index(max(a_o.matrix[row])) != y_exmp.matrix[row][0]:
         wrong += 1
 
-print(f"wrong: {wrong}")
-
+print(f"right: {a_o.rows - wrong}, wrong: {wrong}")
 
 
